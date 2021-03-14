@@ -55,6 +55,27 @@ class BaseRoIHead(nn.Module, metaclass=ABCMeta):
         """
         pass
 
+    def freeze(self, cfg):
+        if self.with_shared_head:
+            if cfg.get('shared_head', None):
+                self.with_shared_head.freeze(cfg['shared_head'])
+
+        if not hasattr(self, 'num_stages'):
+            if self.with_bbox:
+                if cfg.get('bbox_head', None):
+                    self.bbox_head.freeze(cfg['bbox_head'])
+            if self.with_mask:
+                if cfg.get('mask_head', None):
+                    self.mask_head.freeze(cfg['mask_head'])
+        else:
+            for i in range(self.num_stages):
+                if self.with_bbox:
+                    if cfg.get('bbox_head', None):
+                        self.bbox_head[i].freeze(cfg['bbox_head'])
+                if self.with_mask:
+                    if cfg.get('mask_head', None):
+                        self.mask_head[i].freeze(cfg['mask_head'])
+
     @abstractmethod
     def init_bbox_head(self):
         """Initialize ``bbox_head``"""

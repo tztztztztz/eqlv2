@@ -6,6 +6,7 @@ import numpy as np
 from torch.utils.data.dataset import ConcatDataset as _ConcatDataset
 
 from .builder import DATASETS
+from mmdet.utils import get_root_logger
 
 
 @DATASETS.register_module()
@@ -128,23 +129,37 @@ class ClassBalancedDataset(object):
             heuristic above.
     """
 
-    def __init__(self, dataset, oversample_thr):
+    def __init__(self, dataset, oversample_thr, repeat_mode='ceil'):
         self.dataset = dataset
         self.oversample_thr = oversample_thr
         self.CLASSES = dataset.CLASSES
 
         repeat_factors = self._get_repeat_factors(dataset, oversample_thr)
         repeat_indices = []
+
+        def _get_ri(rf):
+            if repeat_mode == 'ceil':
+                return math.ceil(rf)
+            elif repeat_mode == 'round':
+                return round(rf)
+            elif repeat_mode == 'floor':
+                return int(rf)
+            else:
+                raise NotImplementedError
+
         for dataset_index, repeat_factor in enumerate(repeat_factors):
-            repeat_indices.extend([dataset_index] * math.ceil(repeat_factor))
+            repeat_indices.extend([dataset_index] * _get_ri(repeat_factor))
         self.repeat_indices = repeat_indices
 
         flags = []
         if hasattr(self.dataset, 'flag'):
             for flag, repeat_factor in zip(self.dataset.flag, repeat_factors):
-                flags.extend([flag] * int(math.ceil(repeat_factor)))
+                flags.extend([flag] * int(_get_ri(repeat_factor)))
             assert len(flags) == len(repeat_indices)
         self.flag = np.asarray(flags, dtype=np.uint8)
+
+        logger = get_root_logger()
+        logger.info(f"set up RFS dataset, t={oversample_thr}, repeat_mode={repeat_mode}")
 
     def _get_repeat_factors(self, dataset, repeat_thr):
         """Get repeat factor for each images in the dataset.
@@ -196,3 +211,5 @@ class ClassBalancedDataset(object):
     def __len__(self):
         """Length after repetition."""
         return len(self.repeat_indices)
+
+

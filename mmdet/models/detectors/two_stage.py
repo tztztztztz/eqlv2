@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 # from mmdet.core import bbox2result, bbox2roi, build_assigner, build_sampler
+from mmdet.utils import get_root_logger
 from ..builder import DETECTORS, build_backbone, build_head, build_neck
 from .base import BaseDetector
 
@@ -24,15 +25,20 @@ class TwoStageDetector(BaseDetector):
                  pretrained=None):
         super(TwoStageDetector, self).__init__()
         self.backbone = build_backbone(backbone)
+        freeze_cfg = train_cfg.get('freeze', {}) if train_cfg is not None else {}
 
         if neck is not None:
             self.neck = build_neck(neck)
+            if freeze_cfg.get('neck', None):
+                self.neck.freeze(freeze_cfg['neck'])
 
         if rpn_head is not None:
             rpn_train_cfg = train_cfg.rpn if train_cfg is not None else None
             rpn_head_ = rpn_head.copy()
             rpn_head_.update(train_cfg=rpn_train_cfg, test_cfg=test_cfg.rpn)
             self.rpn_head = build_head(rpn_head_)
+            if freeze_cfg.get('rpn', None):
+                self.rpn_head.freeze(freeze_cfg['rpn'])
 
         if roi_head is not None:
             # update train and test cfg here for now
@@ -41,11 +47,20 @@ class TwoStageDetector(BaseDetector):
             roi_head.update(train_cfg=rcnn_train_cfg)
             roi_head.update(test_cfg=test_cfg.rcnn)
             self.roi_head = build_head(roi_head)
+            if freeze_cfg.get('roi_head', None):
+                self.roi_head.freeze(freeze_cfg['roi_head'])
 
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
 
         self.init_weights(pretrained=pretrained)
+
+        log_cfg = train_cfg.get('log_cfg', {}) if train_cfg is not None else {}
+        if log_cfg:
+            logger = get_root_logger()
+            if log_cfg.get('print_param', False):
+                for name, p in self.named_parameters():
+                    logger.info(f"{name}, requires_grad: {p.requires_grad}")
 
     @property
     def with_rpn(self):

@@ -35,6 +35,15 @@ class RPNHead(RPNTestMixin, AnchorHead):
         normal_init(self.rpn_cls, std=0.01)
         normal_init(self.rpn_reg, std=0.01)
 
+    def freeze(self, cfg):
+        if cfg['type'] == 'all':
+            for p in self.parameters():
+                p.requires_grad = False
+        elif cfg['type'] == "none":
+            pass
+        else:
+            raise NotImplementedError
+
     def forward_single(self, x):
         """Forward feature map of a single scale level."""
         x = self.rpn_conv(x)

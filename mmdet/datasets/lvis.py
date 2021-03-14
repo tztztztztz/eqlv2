@@ -6,6 +6,7 @@ import tempfile
 import numpy as np
 from mmcv.utils import print_log
 from terminaltables import AsciiTable
+from mmdet.utils import get_root_logger
 
 from .builder import DATASETS
 from .coco import CocoDataset
@@ -403,15 +404,15 @@ class LVISV05Dataset(CocoDataset):
                     # Compute per-category AP
                     # from https://github.com/facebookresearch/detectron2/
                     precisions = lvis_eval.eval['precision']
-                    # precision: (iou, recall, cls, area range, max dets)
+                    # precision: (iou, recall, cls, area range)
                     assert len(self.cat_ids) == precisions.shape[2]
 
                     results_per_category = []
                     for idx, catId in enumerate(self.cat_ids):
                         # area range index 0: all area ranges
                         # max dets index -1: typically 100 per image
-                        nm = self.coco.load_cats(catId)[0]
-                        precision = precisions[:, :, idx, 0, -1]
+                        nm = self.coco.load_cats([catId])[0]
+                        precision = precisions[:, :, idx, 0]
                         precision = precision[precision > -1]
                         if precision.size:
                             ap = np.mean(precision)
@@ -433,6 +434,9 @@ class LVISV05Dataset(CocoDataset):
                     table = AsciiTable(table_data)
                     print_log('\n' + table.table, logger=logger)
 
+                    with open(f"per-category-ap-{metric}.txt", 'w') as f:
+                        f.write(table.table)
+
                 for k, v in lvis_results.items():
                     if k.startswith('AP'):
                         key = '{}_{}'.format(metric, k)
@@ -447,6 +451,24 @@ class LVISV05Dataset(CocoDataset):
         if tmp_dir is not None:
             tmp_dir.cleanup()
         return eval_results
+
+    def _filter_imgs(self, min_size=32):
+        """Filter images too small or without ground truths."""
+        logger = get_root_logger()
+        valid_inds = []
+        ids_with_ann = set(_['image_id'] for _ in self.coco.anns.values())
+        for i, img_info in enumerate(self.data_infos):
+            if self.filter_empty_gt and self.img_ids[i] not in ids_with_ann:
+                continue
+            filename = img_info['filename']
+            ann_info = self.get_ann_info(i)
+            bboxes = ann_info['bboxes']
+            if len(bboxes) == 0:
+                logger.info(f'detected bad img: {filename}, excluded')
+                continue
+            if min(img_info['width'], img_info['height']) >= min_size:
+                valid_inds.append(i)
+        return valid_inds
 
 
 LVISDataset = LVISV05Dataset

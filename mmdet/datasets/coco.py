@@ -525,6 +525,9 @@ class CocoDataset(CustomDataset):
                     table = AsciiTable(table_data)
                     print_log('\n' + table.table, logger=logger)
 
+                    with open(f"per-category-ap-{metric}.txt", 'w') as f:
+                        f.write(table.table)
+
                 if metric_items is None:
                     metric_items = [
                         'mAP', 'mAP_50', 'mAP_75', 'mAP_s', 'mAP_m', 'mAP_l'

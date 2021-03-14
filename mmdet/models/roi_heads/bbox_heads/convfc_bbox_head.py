@@ -1,8 +1,10 @@
 import torch.nn as nn
 from mmcv.cnn import ConvModule
+from mmcv.cnn import bias_init_with_prob, normal_init
 
 from mmdet.models.builder import HEADS
 from .bbox_head import BBoxHead
+from .lws_layer import LWSLinear
 
 
 @HEADS.register_module()
@@ -28,6 +30,7 @@ class ConvFCBBoxHead(BBoxHead):
                  fc_out_channels=1024,
                  conv_cfg=None,
                  norm_cfg=None,
+                 lws=False,
                  *args,
                  **kwargs):
         super(ConvFCBBoxHead, self).__init__(*args, **kwargs)
@@ -49,6 +52,7 @@ class ConvFCBBoxHead(BBoxHead):
         self.fc_out_channels = fc_out_channels
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+        self.lws = lws
 
         # add shared convs and fcs
         self.shared_convs, self.shared_fcs, last_layer_dim = \
@@ -76,7 +80,22 @@ class ConvFCBBoxHead(BBoxHead):
         self.relu = nn.ReLU(inplace=True)
         # reconstruct fc_cls and fc_reg since input channels are changed
         if self.with_cls:
-            self.fc_cls = nn.Linear(self.cls_last_dim, self.num_classes + 1)
+            if self.use_sigmoid:
+                # sigmoid
+                if self.group_activation:
+                    self.fc_cls = nn.Linear(self.cls_last_dim, self.loss_cls.get_channel_num(self.num_classes))
+                else:
+                    self.fc_cls = nn.Linear(self.cls_last_dim, self.num_classes)
+            else:
+                # softmax
+                if self.group_activation:
+                    n_channel = self.loss_cls.get_channel_num(self.num_classes)
+                else:
+                    n_channel = self.num_classes + 1
+                if self.lws:
+                    self.fc_cls = LWSLinear(self.cls_last_dim, n_channel)
+                else:
+                    self.fc_cls = nn.Linear(self.cls_last_dim, n_channel)
         if self.with_reg:
             out_dim_reg = (4 if self.reg_class_agnostic else 4 *
                            self.num_classes)
@@ -131,6 +150,27 @@ class ConvFCBBoxHead(BBoxHead):
                 if isinstance(m, nn.Linear):
                     nn.init.xavier_uniform_(m.weight)
                     nn.init.constant_(m.bias, 0)
+
+        if self.use_sigmoid:
+            bias_cls = bias_init_with_prob(0.001)
+            normal_init(self.fc_cls, std=0.01, bias=bias_cls)
+
+    def freeze(self, cfg):
+        if cfg['type'] == 'all':
+            for p in self.parameters():
+                p.requires_grad = False
+        elif cfg['type'] == 'feat':
+            for p in self.parameters():
+                p.requires_grad = False
+            for p in self.fc_cls.parameters():
+                p.requires_grad = True
+        elif cfg['type'] == 'none':
+            pass
+        else:
+            raise NotImplementedError
+
+        if self.lws:
+            self.fc_cls.weight_scaler.requires_grad = True
 
     def forward(self, x):
         # shared part

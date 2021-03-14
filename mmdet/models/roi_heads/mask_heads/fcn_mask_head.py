@@ -114,6 +114,20 @@ class FCNMaskHead(nn.Module):
                     m.weight, mode='fan_out', nonlinearity='relu')
                 nn.init.constant_(m.bias, 0)
 
+    def freeze(self, cfg):
+        if cfg['type'] == 'all':
+            for p in self.parameters():
+                p.requires_grad = False
+        elif cfg['type'] == 'feat':
+            for name, p in self.named_parameters():
+                if "conv_logits" not in name:
+                    p.requires_grad = False
+        elif cfg['type'] == 'none':
+            pass
+        else:
+            raise NotImplementedError
+
+
     @auto_fp16()
     def forward(self, x):
         for conv in self.convs:

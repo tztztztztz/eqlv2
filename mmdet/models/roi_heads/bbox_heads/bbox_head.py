@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.nn.modules.utils import _pair
 
 from mmdet.core import (auto_fp16, build_bbox_coder, force_fp32, multi_apply,
-                        multiclass_nms)
+                        multiclass_nms, perclass_nms)
 from mmdet.models.builder import HEADS, build_loss
 from mmdet.models.losses import accuracy
 
@@ -62,6 +62,14 @@ class BBoxHead(nn.Module):
             out_dim_reg = 4 if reg_class_agnostic else 4 * num_classes
             self.fc_reg = nn.Linear(in_channels, out_dim_reg)
         self.debug_imgs = None
+
+    @property
+    def use_sigmoid(self):
+        return self.loss_cls.use_sigmoid
+
+    @property
+    def group_activation(self):
+        return getattr(self.loss_cls, 'group', False)
 
     def init_weights(self):
         # conv layers are already initialized by ConvModule
@@ -195,7 +203,22 @@ class BBoxHead(nn.Module):
                    cfg=None):
         if isinstance(cls_score, list):
             cls_score = sum(cls_score) / float(len(cls_score))
-        scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
+
+        if cls_score is not None:
+            if self.use_sigmoid:
+                if self.group_activation:
+                    scores = self.loss_cls.get_activation(cls_score)
+                else:
+                    scores = F.sigmoid(cls_score)
+                    dummpy_prob = scores.new_zeros((scores.size(0), 1))
+                    scores = torch.cat([scores, dummpy_prob], dim=1)
+            else:
+                if self.group_activation:
+                    scores = self.loss_cls.get_activation(cls_score)
+                else:
+                    scores = F.softmax(cls_score, dim=1)
+        else:
+            scores = None
 
         if bbox_pred is not None:
             bboxes = self.bbox_coder.decode(
@@ -216,6 +239,11 @@ class BBoxHead(nn.Module):
 
         if cfg is None:
             return bboxes, scores
+        elif cfg.get('perclass_nms', False):
+            det_bboxes, det_labels = perclass_nms(bboxes, scores,
+                                                  cfg.score_thr, cfg.nms,
+                                                  cfg.max_per_img)
+            return det_bboxes, det_labels
         else:
             det_bboxes, det_labels = multiclass_nms(bboxes, scores,
                                                     cfg.score_thr, cfg.nms,

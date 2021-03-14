@@ -161,6 +161,15 @@ class FPN(nn.Module):
             if isinstance(m, nn.Conv2d):
                 xavier_init(m, distribution='uniform')
 
+    def freeze(self, cfg):
+        if cfg['type'] == 'all':
+            for p in self.parameters():
+                p.requires_grad = False
+        elif cfg['type'] == 'none':
+            pass
+        else:
+            raise NotImplementedError
+
     @auto_fp16()
     def forward(self, inputs):
         """Forward function."""
