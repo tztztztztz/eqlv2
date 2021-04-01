@@ -1,6 +1,6 @@
 # The Equalization Losses for Long-tailed Object Detection and Instance Segmentation
 
-This repo is official implementation CVPR 2021 paper: **Equalization Loss v2: A New Gradient Balance Approach for Long-tailed Object Detection** and CVPR 2020 paper: **Equalization Loss for Long-tailed Object Detection**
+This repo is official implementation CVPR 2021 paper: **Equalization Loss v2: A New Gradient Balance Approach for Long-tailed Object Detection** and CVPR 2020 paper: **Equalization loss for long-tailed object recognition**
 
 
 <div><img src="docs/img/toast.png" width="50%"></img></div>
