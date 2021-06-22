@@ -267,8 +267,8 @@ If you use the equalization losses, please cite our papers.
 @article{tan2020eqlv2,
   title={Equalization Loss v2: A New Gradient Balance Approach for Long-tailed Object Detection},
   author={Tan, Jingru and Lu, Xin and Zhang, Gang and Yin, Changqing and Li, Quanquan},
-  journal={arXiv preprint arXiv:2012.08548},
-  year={2020}
+  journal={CVPR},
+  year={2021}
 }
 ```
 
