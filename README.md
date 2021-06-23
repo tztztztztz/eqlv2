@@ -264,11 +264,13 @@ mAP4: 0.5588236678031849
 If you use the equalization losses, please cite our papers.
 
 ```
-@article{tan2020eqlv2,
-  title={Equalization Loss v2: A New Gradient Balance Approach for Long-tailed Object Detection},
-  author={Tan, Jingru and Lu, Xin and Zhang, Gang and Yin, Changqing and Li, Quanquan},
-  journal={CVPR},
-  year={2021}
+@InProceedings{tan2021eqlv2,
+    author    = {Tan, Jingru and Lu, Xin and Zhang, Gang and Yin, Changqing and Li, Quanquan},
+    title     = {Equalization Loss v2: A New Gradient Balance Approach for Long-Tailed Object Detection},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+    month     = {June},
+    year      = {2021},
+    pages     = {1685-1694}
 }
 ```
 
