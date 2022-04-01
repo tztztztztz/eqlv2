@@ -19,7 +19,8 @@ class EQLv2(nn.Module):
                  gamma=12,
                  mu=0.8,
                  alpha=4.0,
-                 vis_grad=False):
+                 vis_grad=False,
+                 test_with_obj=True):
         super().__init__()
         self.use_sigmoid = True
         self.reduction = reduction
@@ -35,9 +36,13 @@ class EQLv2(nn.Module):
         self.alpha = alpha
 
         # initial variables
-        self._pos_grad = None
-        self._neg_grad = None
-        self.pos_neg = None
+        self.register_buffer('pos_grad', torch.zeros(self.num_classes))
+        self.register_buffer('neg_grad', torch.zeros(self.num_classes))
+        # At the beginning of training, we set a high value (eg. 100)
+        # for the initial gradient ratio so that the weight for pos gradients and neg gradients are 1.
+        self.register_buffer('pos_neg', torch.ones(self.num_classes) * 100)
+
+        self.test_with_obj = test_with_obj
 
         def _func(x, gamma, mu):
             return 1 / (1 + torch.exp(-gamma * (x - mu)))
@@ -84,7 +89,8 @@ class EQLv2(nn.Module):
         cls_score = torch.sigmoid(cls_score)
         n_i, n_c = cls_score.size()
         bg_score = cls_score[:, -1].view(n_i, 1)
-        cls_score[:, :-1] *= (1 - bg_score)
+        if self.test_with_obj:
+            cls_score[:, :-1] *= (1 - bg_score)
         return cls_score
 
     def collect_grad(self, cls_score, target, weight):
@@ -99,21 +105,13 @@ class EQLv2(nn.Module):
         dist.all_reduce(pos_grad)
         dist.all_reduce(neg_grad)
 
-        self._pos_grad += pos_grad
-        self._neg_grad += neg_grad
-        self.pos_neg = self._pos_grad / (self._neg_grad + 1e-10)
+        self.pos_grad += pos_grad
+        self.neg_grad += neg_grad
+        self.pos_neg = self.pos_grad / (self.neg_grad + 1e-10)
 
     def get_weight(self, cls_score):
-        # we do not have information about pos grad and neg grad at beginning
-        if self._pos_grad is None:
-            self._pos_grad = cls_score.new_zeros(self.num_classes)
-            self._neg_grad = cls_score.new_zeros(self.num_classes)
-            neg_w = cls_score.new_ones((self.n_i, self.n_c))
-            pos_w = cls_score.new_ones((self.n_i, self.n_c))
-        else:
-            # the negative weight for objectiveness is always 1
-            neg_w = torch.cat([self.map_func(self.pos_neg), cls_score.new_ones(1)])
-            pos_w = 1 + self.alpha * (1 - neg_w)
-            neg_w = neg_w.view(1, -1).expand(self.n_i, self.n_c)
-            pos_w = pos_w.view(1, -1).expand(self.n_i, self.n_c)
+        neg_w = torch.cat([self.map_func(self.pos_neg), cls_score.new_ones(1)])
+        pos_w = 1 + self.alpha * (1 - neg_w)
+        neg_w = neg_w.view(1, -1).expand(self.n_i, self.n_c)
+        pos_w = pos_w.view(1, -1).expand(self.n_i, self.n_c)
         return pos_w, neg_w
